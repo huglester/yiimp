@@ -769,3 +769,10 @@ void sha256_hash_hex(const char *input, char *output, unsigned int len)
 	hexlify(output, (unsigned char *)output1, 32);
 }
 
+void keccak256_hash_hex(const char *input, char *output, unsigned int len)
+{
+	char output1[32];
+
+	keccak256_hash(input, output1, len);
+	hexlify(output, (unsigned char *)output1, 32);
+}
