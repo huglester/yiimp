@@ -21,6 +21,7 @@ function yaamp_get_algos()
 		'hmq1725',
 		'keccak',
 		'keccakc',
+		'keccakmtr',
 		'jha',
 		'hsr',
 		'lbry',
