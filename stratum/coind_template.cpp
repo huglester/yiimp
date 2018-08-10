@@ -248,10 +248,10 @@ static int metro_parse_header(YAAMP_JOB_TEMPLATE *templ, const char *header_hex,
     //TODO is it required?
 	//templ->height = header.height;
 
-	// reversed to tell its not a normal stratum coinbase
-	sprintf(templ->version, "%08x", getwork ? header.version);
+	//TODO check if needed to reverse to tell its not a normal stratum coinbase
+	sprintf(templ->version, "%08x", header.version);
 	//TODO 64 -> 32
-	sprintf(templ->ntime, "%08x", header.ntime);
+	sprintf(templ->ntime, "%08x", (uint32_t) header.ntime);
 	sprintf(templ->nbits, "%08x", header.nbits);
 
 	templ->prevhash_hex[64] = '\0';
