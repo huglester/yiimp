@@ -134,6 +134,44 @@ static void build_submit_values_decred(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB
 	string_be(submitvalues->hash_hex, submitvalues->hash_be);
 }
 
+/////////////////////////////////////////////
+
+static void create_metro_header(YAAMP_JOB_TEMPLATE *templ, YAAMP_JOB_VALUES *out,
+	const char *ntime, const char *nonce, const char *nonce2)
+{
+	struct __attribute__((__packed__)) {
+		uint16_t version;
+		uint64_t ntime;
+		char merkleroot[32];
+		uint64_t prevblockid;
+		uint64_t prevkeyblockid;
+		char stakeroot[32];
+		uint32_t nbits;
+		uint32_t nonce;
+	} header;
+
+	memcpy(&header, templ->header, sizeof(header));
+	sscanf(nonce, "%08x", &header.nonce);
+
+	//memset(header.extra, 0, 32);
+	//binlify(header.extra, nonce2);
+
+	hexlify(out->header, (const unsigned char*) &header, 98);
+	memcpy(out->header_bin, &header, sizeof(header));
+}
+
+static void build_submit_values_metro(YAAMP_JOB_VALUES *submitvalues, YAAMP_JOB_TEMPLATE *templ,
+	const char *nonce1, const char *nonce2, const char *ntime, const char *nonce)
+{
+	create_metro_header(templ, submitvalues, ntime, nonce, nonce2);
+
+	int header_len = strlen(submitvalues->header)/2;
+	g_current_algo->hash_function((char *)submitvalues->header_bin, (char *)submitvalues->hash_bin, header_len);
+
+	hexlify(submitvalues->hash_hex, submitvalues->hash_bin, 32);
+	string_be(submitvalues->hash_hex, submitvalues->hash_be);
+}
+
 /////////////////////////////////////////////////////////////////////////////////
 
 static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VALUES *submitvalues,
@@ -272,7 +310,7 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 
 			string_be(doublehash2, hash1);
 
-			if(coind->usegetwork && !strcmp("DCR", coind->rpcencoding)) {
+			if(coind->usegetwork && (!strcmp("DCR", coind->rpcencoding) || !strcmp("METRO", coind->rpcencoding)) {
 				// no merkle stuff
 				strcpy(hash1, submitvalues->hash_hex);
 			}
@@ -421,6 +459,7 @@ bool client_submit(YAAMP_CLIENT *client, json_value *json_params)
 	}
 
 	bool is_decred = job->coind && !strcmp("DCR", job->coind->rpcencoding);
+	bool is_metro = job->coind && !strcmp("METRO", job->coind->rpcencoding);
 
 	YAAMP_JOB_TEMPLATE *templ = job->templ;
 
@@ -490,6 +529,8 @@ bool client_submit(YAAMP_CLIENT *client, json_value *json_params)
 
 	if(is_decred)
 		build_submit_values_decred(&submitvalues, templ, client->extranonce1, extranonce2, ntime, nonce, vote, true);
+	else if(is_metro)
+		build_submit_values_metro(&submitvalues, templ, client->extranonce1, extranonce2, ntime, nonce);
 	else
 		build_submit_values(&submitvalues, templ, client->extranonce1, extranonce2, ntime, nonce);
 

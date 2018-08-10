@@ -171,7 +171,7 @@ void coind_init(YAAMP_COIND *coind)
 	yaamp_create_mutex(&coind->mutex);
 
 	strcpy(account, coind->account);
-	if(!strcmp(coind->rpcencoding, "DCR")) {
+	if(!strcmp(coind->rpcencoding, "DCR") || !strcmp(coind->rpcencoding, "METRO")) {
 		coind->usegetwork = true;
 		//sprintf(account, "default");
 	}

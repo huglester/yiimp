@@ -228,6 +228,114 @@ static void decred_fix_template(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, j
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+static int metro_parse_header(YAAMP_JOB_TEMPLATE *templ, const char *header_hex, bool getwork)
+{
+	struct __attribute__((__packed__)) {
+		uint16_t version;
+		uint64_t ntime;
+		char merkleroot[32];
+		uint64_t prevblockid;
+		uint64_t prevkeyblockid;
+		char stakeroot[32];
+		uint32_t nbits;
+		uint32_t nonce;
+	} header;
+
+	//debuglog("HEADER: %s\n", header_hex);
+
+	binlify((unsigned char*) &header, header_hex);
+
+    //TODO is it required?
+	//templ->height = header.height;
+
+	// reversed to tell its not a normal stratum coinbase
+	sprintf(templ->version, "%08x", getwork ? header.version);
+	//TODO 64 -> 32
+	sprintf(templ->ntime, "%08x", header.ntime);
+	sprintf(templ->nbits, "%08x", header.nbits);
+
+	templ->prevhash_hex[64] = '\0';
+	uint32_t* prev32 = (uint32_t*) header.prevblockid;
+	for(int i=0; i < 2; i++)
+		sprintf(&templ->prevhash_hex[i*8], "%08x", getwork ? prev32[7-i] : bswap32(prev32[7-i]));
+	ser_string_be2(templ->prevhash_hex, templ->prevhash_be, 8);
+
+	// store all other stuff
+	memcpy(templ->header, &header, sizeof(header));
+
+	return 0;
+}
+
+// metro getwork over stratum
+static YAAMP_JOB_TEMPLATE *metro_create_worktemplate(YAAMP_COIND *coind)
+{
+	char rpc_error[1024] = { 0 };
+	#define GETWORK_RETRY_MAX 3
+	int retry_cnt = GETWORK_RETRY_MAX;
+retry:
+	json_value *gw = rpc_call(&coind->rpc, "getwork", "[]");
+	if(!gw || json_is_null(gw)) {
+		usleep(500*YAAMP_MS); // too much connections ? no data received
+		if (--retry_cnt > 0) {
+			if (coind->rpc.curl)
+				rpc_curl_get_lasterr(rpc_error, 1023);
+			debuglog("%s getwork retry %d\n", coind->symbol, GETWORK_RETRY_MAX-retry_cnt);
+			goto retry;
+		}
+		debuglog("%s error getwork %s\n", coind->symbol, rpc_error);
+		return NULL;
+	}
+	json_value *gwr = json_get_object(gw, "result");
+	if(!gwr) {
+		debuglog("%s no getwork json result!\n", coind->symbol);
+		return NULL;
+	}
+	else if (json_is_null(gwr)) {
+		json_value *jr = json_get_object(gw, "error");
+		if (!jr || json_is_null(jr)) return NULL;
+		const char *err = json_get_string(jr, "message");
+		if (err && !strcmp(err, "internal error")) {
+			usleep(500*YAAMP_MS); // not enough voters (testnet)
+			if (--retry_cnt > 0) {
+				goto retry;
+			}
+			debuglog("%s getwork failed after %d tries: %s\n",
+				coind->symbol, GETWORK_RETRY_MAX, err);
+		}
+		return NULL;
+	}
+	const char *header_hex = json_get_string(gwr, "data");
+	if (!header_hex || !strlen(header_hex)) {
+		debuglog("%s no getwork data!\n", coind->symbol);
+		return NULL;
+	}
+
+	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE;
+	memset(templ, 0, sizeof(YAAMP_JOB_TEMPLATE));
+
+	templ->created = time(NULL);
+
+	metro_parse_header(templ, header_hex, true);
+	json_value_free(gw);
+
+	// bypass coinbase and merkle for now... send without nonce/extradata
+
+	const unsigned char *hdr = (unsigned char *) &templ->header[0];
+	hexlify(templ->coinb1, hdr, 94);
+	hexlify(templ->coinb2, hdr, 0);
+
+	vector<string> txhashes;
+	txhashes.push_back("");
+
+	templ->txmerkles[0] = 0;
+	templ->txcount = txhashes.size();
+	templ->txsteps = merkle_steps(txhashes);
+	txhashes.clear();
+
+	return templ;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 {
 	if(coind->usememorypool)
@@ -243,6 +351,8 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 		// coind_error() reset auto_ready, and DCR gbt can fail
 		if (strcmp(coind->rpcencoding, "DCR") == 0)
 			debuglog("decred getblocktemplate failed\n");
+		else if (strcmp(coind->rpcencoding, "METRO") == 0)
+			debuglog("metro getblocktemplate failed\n");
 		else
 			coind_error(coind, "getblocktemplate");
 		return NULL;
@@ -518,6 +628,8 @@ bool coind_create_job(YAAMP_COIND *coind, bool force)
 
 	if (coind->usegetwork && strcmp(coind->rpcencoding, "DCR") == 0)
 		templ = decred_create_worktemplate(coind);
+	else if (coind->usegetwork && strcmp(coind->rpcencoding, "METRO") == 0)
+		templ = metro_create_worktemplate(coind);
 	else
 		templ = coind_create_template(coind);
 

@@ -311,6 +311,10 @@ void db_update_coinds(YAAMP_DB *db)
 		if(!strcmp(coind->symbol, "DCR") && strcmp(coind->rpcencoding, "DCR"))
 			strcpy(coind->rpcencoding, "DCR");
 
+		// force the right rpcencoding for METRO
+		if(!strcmp(coind->symbol, "METRO") && strcmp(coind->rpcencoding, "METRO"))
+			strcpy(coind->rpcencoding, "METRO");
+
 		// old dash masternodes coins..
 		if(coind->hasmasternodes) {
 			if (strcmp(coind->symbol, "ALQO") == 0) coind->oldmasternodes = true;
