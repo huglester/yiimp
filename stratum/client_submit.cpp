@@ -310,7 +310,7 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 
 			string_be(doublehash2, hash1);
 
-			if(coind->usegetwork && (!strcmp("DCR", coind->rpcencoding) || !strcmp("METRO", coind->rpcencoding)) {
+			if(coind->usegetwork && (!strcmp("DCR", coind->rpcencoding) || !strcmp("METRO", coind->rpcencoding))) {
 				// no merkle stuff
 				strcpy(hash1, submitvalues->hash_hex);
 			}
